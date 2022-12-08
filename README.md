@@ -1,2 +1,2 @@
 # Bash Scripts
-A place to work and keep track of my bash scripts
+A place to work on and keep track of my bash scripts
