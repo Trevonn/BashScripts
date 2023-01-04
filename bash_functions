@@ -4,6 +4,21 @@ function mkcd() {
     mkdir -p -- "$1" && cd -P -- "$1"
 }
 
+function arewetsc() {
+    # Store the current clocksource in a variable
+    tscCheck=$(cat /sys/devices/system/clocksource/clocksource*/current_clocksource)
+
+    # Check the value of the variable. Print a message to journalctl depending on the result
+    if [ $tscCheck == "tsc" ] 
+    then
+        echo 'TSC active' | systemd-cat -p info
+        echo 'TSC active'
+    else
+        echo 'TSC not active' | systemd-cat -p emerg
+        echo 'TSC not active'
+    fi
+}
+
 function clean() {
     yay -Sc
     sudo rm -rf /var/log/journal/*
@@ -17,7 +32,7 @@ function clean() {
 # Music
 
 function eaudio() {
-    find -type f -name '*.flac' | {
+    find -type f -name "*.flac" | {
         for file in ./*.flac; do
             opusenc --bitrate $1 "$file" "${file%.flac}.opus"
         done
@@ -25,7 +40,7 @@ function eaudio() {
 }
 
 function eaudio2() {
-    find -type f -name '*.$1' | {
+    find -type f -name "*.$1" | {
         for file in ./*.$1; do
             #opusenc --bitrate $2 "$file" "${file%.$1}.opus"
             ffmpeg -i "$file" -b:a $2 -ac $3 "${file%.$1}.$4"
@@ -73,11 +88,22 @@ function dmusicsing {
 
 # Video 
 
-function defaultAudio2() {
-    find -type f -name '*.mkv' | {
+function defaultTrack() {
+    # $1 audio or subtitle (a/s)
+    # $2 track number (1,2,3)
+    # $3 enable or disable (1,0)
+    find -type f -name "*.mkv" | {
         while read file ; do
-            #mkvpropedit "$file" --edit track:a1 --set flag-default=0 --edit track:a2 --set flag-default=1
-            mkvmerge -o $file-fixed --atracks 2 $file
+            mkvpropedit "$file" --edit track:$1$2 --set flag-default=$3
+        done
+    }
+}
+
+function removeTracks() {
+    find -type f -name "*.mkv" | {
+        while read file ; do
+            output=$(basename "$file" .mkv)
+            mkvmerge -o "$output"-fixed.mkv --audio-tracks $1 "$file"
         done
     }
 }
@@ -85,7 +111,7 @@ function defaultAudio2() {
 # Images
 
 function tojxl() {
-    find -type f -name '*.$1' | {
+    find -type f -name "*.$1" | {
         for file in ./*.$1; do
             cjxl "$file" "${file%.$1}.jxl"
         done
@@ -110,38 +136,48 @@ function dx12() {
 
 # Emulation
 
-function crom {
+
+function romsearch() {
+    find -type f -name "*.$1"
+}
+
+function crom() {
     if [ "$1" == "chd" ]
     then
-        if [ -f *.$2 ] # $2 Can be .cue or .iso
+        roms=$(romsearch $2)
+        if [ -z "$roms" ]
         then
-            echo "Compressing using chdman"
-            for romFile in *.$2; do
-                gameName="$(basename "$romFile" .$2)"
-                echo "Converting ${gameName}..."
-                chdman createcd -i "${romFile}" -o "${gameName}.chd"
-            done
+            echo "No roms found"
+        else
+            romsearch $2 | {
+                while read rom ; do
+                    gameName="$(basename "$rom" $2)"
+                    echo "Compressing ${gameName} using chdman"
+                    chdman createcd -i "${rom}" -o "${gameName}.chd"
+                done
+            }
         fi
     elif [ "$1" == "cso" ]
     then
-        if [ -f *.iso ]
+        roms=$(romsearch iso)
+        if [ -z "$roms" ]
         then
-            echo "Compressing using maxcso"
-            for isoFile in ./*.iso; do
-                gameName="$(basename "$isoFile" .iso)"
-                maxcso "$isoFile" -o "${gameName}.cso"
-            done
+            echo "No roms found"
         else
-            echo "No .iso files found"
+            romsearch iso | {
+                while read rom ; do 
+                    gameName="$(basename "$rom" .iso)"
+                    echo "Compressing ${gameName} using maxcso"
+                    maxcso "$rom" -o "${gameName}.cso"
+                done
+            }
         fi
     else
         echo "No option selected. You need to choose chd (chdman) or cso (maxcso)"
     fi
 }
 
-
 function recrom() {
-#    unzip *\.zip
     ark --batch --autodestination *.7z
     mvrom $1
 }
@@ -170,8 +206,7 @@ function mvrom() {
         mv ./*.chd "$HOME/Games/Emulation/ROMs/Sony/PS2"
     elif [ "$1" == "ps1" ]
     then
-        ecm2bin *.ecm
-        crom chd
+        crom chd cue
         mv ./*.chd "$HOME/Games/Emulation/ROMs/Sony/PS1"
     elif [ "$1" == "psp" ]
     then
