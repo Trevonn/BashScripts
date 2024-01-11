@@ -47,18 +47,14 @@ function folderEmptyDelete() {
     fi
 }
 
-function arewetsc() {
-    # Store the current clocksource in a local variable
-    local tscCheck=$(cat /sys/devices/system/clocksource/clocksource*/current_clocksource)
-
-    # Check the value of the variable. Print a message to journalctl depending on the result
-    if [ $tscCheck == "tsc" ] 
+function tscCheck() {
+    if [[ $(cat /sys/devices/system/clocksource/clocksource0/current_clocksource) == "tsc" ]]
     then
-        echo "TSC active" | systemd-cat -p info
-        echo "TSC active"
+        echo "TSC is active" | systemd-cat -p info
+        echo "TSC is active"
     else
-        echo "TSC not active" | systemd-cat -p emerg
-        echo "TSC not active"
+        echo "TSC is not active" | systemd-cat -p emerg
+        echo "TSC is not active"
     fi
 }
 
