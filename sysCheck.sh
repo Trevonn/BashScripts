@@ -15,10 +15,10 @@ function sysCheck() {
     echo
     echo "GPU"
     echo "......................"
-    echo "Mesa                 : $(vulkaninfo | grep driverVersion | awk '{ print $3 }')"
+    echo "Mesa                 : $(vulkaninfo | grep driverVersion | awk 'NR==1 { print $3 }')"
     echo "LLVM                 : $(llvm-config --version)"
     echo "OpenGL               : $(glxinfo | grep 'OpenGL core profile version string' | awk '{ print $6 }')"
-    echo "Vulkan               : $(vulkaninfo | grep apiVersion | awk '{ print $3 }')"
+    echo "Vulkan               : $(vulkaninfo | grep apiVersion | awk 'NR==1 { print $3 }')"
     echo "AMD Perf State       : $(cat $gpuLevel)"
     echo
     echo "System"
