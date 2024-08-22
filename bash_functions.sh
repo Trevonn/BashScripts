@@ -565,8 +565,8 @@ function gpuCheck() {
     local gpuLevel=/sys/class/drm/card1/device/power_dpm_force_performance_level
     echo "GPU"
     echo "......................"
-    echo "Name                 : $(printAfter "$(DRI_PRIME=0 vulkaninfo --summary | grep -m 1 "deviceName")" "= ")"
-    echo "VRAM                 : $(DRI_PRIME=1 glxinfo -B | grep "Dedicated video memory:" | awk 'NR==1 { print $4 }') MB"
+    echo "Name                 : $(printAfter "$(DRI_PRIME=1! vulkaninfo --summary | grep -m 1 "deviceName")" "= ")"
+    echo "VRAM                 : $(DRI_PRIME=1! glxinfo -B | grep "Dedicated video memory:" | awk 'NR==1 { print $4 }') MB"
     echo "Mesa                 : $(vulkaninfo | grep driverVersion | awk 'NR==1 { print $3 }')"
     echo "LLVM                 : $(llvm-config --version)"
     echo "OpenGL               : $(glxinfo | grep "OpenGL core profile version string" | awk '{ print $6 }')"
