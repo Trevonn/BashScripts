@@ -238,7 +238,7 @@ dxSetup() {
 crom() {
     case $1 in
     "chdDVD")
-        findFiles2 iso bin | parallel chdman createdvd -f -i "{}" -o "{.}.chd -c zstd" ;;
+        findFiles2 iso bin | parallel chdman createdvd -f -i "{}" -o "{.}.chd" ;;
     "chdCD")
         findFiles cue | parallel chdman createcd -f -i "{}" -o "{.}.chd" ;;
     *)
