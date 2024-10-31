@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Store the current clocksource in a variable
-local tscCheck=$(cat /sys/devices/system/clocksource/clocksource*/current_clocksource)
+tscCheck=$(cat /sys/devices/system/clocksource/clocksource*/current_clocksource)
 
 # Check the value of the variable. Print a message to journalctl depending on the result
 if [ $tscCheck == "tsc" ] 
