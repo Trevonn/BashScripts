@@ -450,11 +450,11 @@ sysCheck() {
     local gamemodeCheck=$(if [[ -f /usr/bin/gamemoded ]]; then gamemoded -v | awk '{ print $3 }' | cut -c 2-; else echo "Not installed"; fi )
     local gamescopeCheck=$(isInstalled /usr/bin/gamescope)
     
-    echo "System Check V2.1"
+    echo "System Check V2.11"
     echo
     echo "System"
     echo "......................"
-    echo "Kernel               : $kernel"
+    echo "Kernel               : $kernelVersion"
     echo "glibc                : $glibcVersion"
     echo "vm.max_map_count     : $maxMapCount"
     echo "DefaultLimitNOFILE   : $limitNOFILE"

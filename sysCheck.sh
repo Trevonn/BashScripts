@@ -1,5 +1,21 @@
 #!/bin/bash
 
+printAfter() {
+    string=$1
+    searchstring="$2"
+    result=${string#*$searchstring}
+    echo $result
+}
+
+isInstalled() {
+    if [[ -f $1 ]]
+    then
+        echo "Installed"
+    else
+        echo "Not installed";
+    fi
+}
+
 sysCheck() {
     local kernelVersion=$(uname -r)
     local glibcVersion=$(ldd --version | grep ldd | awk '{print $4}')
@@ -24,11 +40,11 @@ sysCheck() {
     local gamemodeCheck=$(if [[ -f /usr/bin/gamemoded ]]; then gamemoded -v | awk '{ print $3 }' | cut -c 2-; else echo "Not installed"; fi )
     local gamescopeCheck=$(isInstalled /usr/bin/gamescope)
     
-    echo "System Check V2.1"
+    echo "System Check V2.11"
     echo
     echo "System"
     echo "......................"
-    echo "Kernel               : $kernel"
+    echo "Kernel               : $kernelVersion"
     echo "glibc                : $glibcVersion"
     echo "vm.max_map_count     : $maxMapCount"
     echo "DefaultLimitNOFILE   : $limitNOFILE"
