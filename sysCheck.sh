@@ -1,9 +1,9 @@
 #!/bin/bash
 
 printAfter() {
-    string=$1
-    searchstring="$2"
-    result=${string#*$searchstring}
+    local string=$1
+    local searchstring="$2"
+    local result=${string#*$searchstring}
     echo $result
 }
 
@@ -76,4 +76,4 @@ sysCheck() {
     echo "Gamescope            : $gamescopeCheck"
 }
 
-sysCheck > sysCheck.txt
+sysCheck
