@@ -1,12 +1,11 @@
 #!/bin/bash
 
-# Store the current clocksource in a variable
-tscCheck=$(cat /sys/devices/system/clocksource/clocksource*/current_clocksource)
-
-# Check the value of the variable. Print a message to journalctl depending on the result
-if [ $tscCheck == "tsc" ] 
-then
-    echo 'TSC active' | systemd-cat -p info
-else
-    echo 'TSC not active' | systemd-cat -p emerg
-fi
+tscCheck() {
+    # Check the value of the variable. Print a message to journalctl depending on the result
+    if [[ $(cat /sys/devices/system/clocksource/clocksource0/current_clocksource) == "tsc" ]] then
+        echo "TSC is active"
+    else
+        echo "TSC is not active" | systemd-cat -p emerg
+        echo "TSC is not active"
+    fi
+}
