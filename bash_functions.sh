@@ -1,4 +1,5 @@
 #!/bin/bash
+
 # General
 
 mkcd() {
@@ -6,50 +7,13 @@ mkcd() {
 }
 
 nvmeHealth() {
-    local option="" 
-    read -p "Disk: " option
-    sudo nvme smart-log -H /dev/nvme$option
+    sudo nvme smart-log -H /dev/nvme$1
 }
 
-resetDevice() {
-    local option=""
-    local module=""
-    echo "Device Reset 1.0"
-    echo "1. Bluetooth                   - btusb"
-    echo "2. Intel WiFi                  - iwlmvm"
-    echo "3. Mediatek WiFi               - mt7921e"
-    echo "4. PlayStation 4/5 Controllers - hid_playstation"
-    echo "5. PlayStation 3 Controllers   - hid_sony"
-    read -p "Option: " option
-    case $option in
-        1)
-            module=btusb ;;
-        2)
-            module=iwlmvm ;;
-        3)
-            module=mt7921e ;;
-        4)
-            module=hid_playstation ;;
-        5)
-            module=hid_sony ;;
-        *)
-            echo "Incorrect or no option chosen"
-            return
-    esac
-    echo "Option $module reset"
-    sudo rmmod $module && sudo modprobe $module
-}
-
-findFiles() {
-    find -type f -name "*.$1"
-}
-
-findFiles2() {
-    find ./ -type f \( -iname \*."$1" -o -iname \*."$2" \)
-}
-
-findFolders() {
-    find -maxdepth 1 -type d -name "$1*"
+firmwareUpdate() {
+    fwupdmgr refresh --force
+    fwupdmgr get-updates
+    fwupdmgr update
 }
 
 to7z() {
@@ -61,50 +25,30 @@ toZst() {
 }
 
 delete() {
-    if [[ -d "$1" ]]
-    then
-        sudo rm -r "$1"
-        echo "Deleting folder $1"
-    elif [[ -f "$1" ]]
-    then
-        sudo rm "$1"
-        echo "Deleting file $1"
+    if [[ -d "$1" ]] then
+        rm -r "$1"
+        if [[ -d "$1" ]] then
+            sudo rm -r "$1"
+        fi
+        echo "Deleted folder $1"
+    elif [[ -f "$1" ]] then
+        rm "$1"
+        if [[ -f "$1" ]] then
+            sudo rm "$1"
+        fi
+        echo "Deleted file $1"
     else
         echo "$1 not found"
     fi
 }
 
-tscCheck() {
-    if [[ $(cat /sys/devices/system/clocksource/clocksource0/current_clocksource) == "tsc" ]]
-    then
-        echo "TSC is active" | systemd-cat -p info
-        echo "TSC is active"
-    else
-        echo "TSC is not active" | systemd-cat -p emerg
-        echo "TSC is not active"
-    fi
-    return
+sendTo() {
+    scp $2 $USER@$1:$HOME/Downloads
 }
 
-clearCacheFiles() {
-    find $XDG_CACHE_HOME -type d -name "$1" | while read folder
-    do
-      find $folder -name "*" -type f -mtime +1 -delete
-    done
-}
-
-storageCleanup() {
-    yay -Scc
-    sudo rm -r /var/log/journal/*
-    echo "Cleared /var/log/journal"
-    sudo rm -rf /var/lib/systemd/coredump/*
-    echo "Cleared /var/lib/systemd/coredump"
-    find "$XDG_CACHE_HOME" -name "ksycoca6*" -type f -mtime +1 -delete
-    find "$XDG_CACHE_HOME/qtshadercache-x86_64-little_endian-lp64/" -name "*" -type f -mtime +1 -delete
-    find "$XDG_CACHE_HOME" -name "*.qmlc" -type f -mtime +1 -delete
-    find "$XDG_CACHE_HOME" -name "*.jsc" -type f -mtime +1 -delete
-    find "$XDG_CACHE_HOME" -name "qqpc_opengl" -type f -mtime +1 -delete
-    echo "Cleared various cache files"
+dockerKill() {
+    docker kill $1
+    docker rm $1
 }
 
 debugLogs() {
@@ -122,87 +66,205 @@ debugLogs() {
     rm -R debugLogs
 }
 
-# Media
-
-toFlac() {
-    findFiles $1 | parallel ffmpeg -i "{}" -c:a flac -sample_fmt s32 "{.}.flac"
-}
-
-flacToOpus() {
-    findFiles flac | parallel opusenc --bitrate $1 "{}" "{.}.opus"
-}
-
-tagMusic() {
-    if [[ "$1" == "title" ]]
-    then
-        kid3-cli -c "select *.opus" -c "totag '%{title}' 2"
-    elif [[ "$1" == "album" ]]
-    then
-        kid3-cli -c "select *.opus" -c "set Album '$2'"
-    else
-        echo "Fail"
-    fi
-}
-
 downloadMusic() {
     yt-dlp --format 251 --extract-audio --audio-format "opus" $1 -o "%(title)s.%(ext)s"
 }
 
 mkvDefaultTrack() {
-    echo "MKV Default Track Changer 1.0"
+    mkvpropedit $1 --edit track:$2$3 --set flag-default=$4 --set flag-forced=$5
+}
+
+mkvDefaultTrackBatch() {
+    echo "MKV Default Track Changer Batch 1.0"
     echo "This script lets you change the default track properties in an MKV"
-    echo ""
+    echo
     local trackType=""
     local trackNum=""
     local trackDef=""
     local trackForced=""
-    mkvInfo "$file"
+
     echo "MKV Default Track Selector"
     read -p "Default track type: audio or subtitle (a/s): " trackType
     read -p "Choose a track number: " trackNum
     read -p "Set the track number as default? (0,1): " trackDef
     read -p "Set the track number as forced (0,1) " trackForced
-    findFiles mkv | parallel mkvpropedit "{}" --edit track:$trackType$trackNum --set flag-default=$trackDef --set flag-forced=$trackForced
+    find -type f -iname "*.mkv" | parallel mkvDefaultTrack "{}" $trackType $trackNum $trackDef $trackForced
+}
+
+downsampleAudio() {
+    mkdir Muxed
+    find -type f -iname "$1" | parallel ffmpeg -y -i "{}" -map 0 -c copy -c:a:0 aac -b:a:0 256k -ac 2 "Muxed/{}"
 }
 
 toMKV() {
-    findFiles $1 | parallel mkvmerge -o "{.}.mkv" "{}"
+    find -type f -iname "*.$1" | parallel mkvmerge -o "{.}.mkv" "{}"
 }
 
 removeTracks() {
-# Audio and Subtitle tracks not chosen by $1 and $2 will be removed
-    findFiles mkv | parallel mkvmerge -o "Muxed/{}" -a $1 -s $2 "{}"
+    mkvmerge -o "Muxed/$1" -a $2 -s $3 "$1"
+}
+
+batchRemoveTracks() {
+    # Audio and Subtitle tracks not chosen by $1 and $2 will be removed
+    find -type f -iname "*.mkv" | parallel mkvmerge -o "Muxed/{}" -a $1 -s $2 "{}"
 }
 
 addSubs() {
-    findFiles $1 | parallel mkvmerge -o "Muxed/{}" "{}" "{.}".srt
+    local videoExt=""
+    read -p "Video File Extension Type: " videoExt
+    find -type f -iname "*.$videoExt" | parallel mkvmerge -o "Muxed/{.}.mkv" "{}" "{.}"*.srt
 }
 
 toJxl() {
-    local type=""
-    read -p "Image Type: " type
-    echo ".$type images chosen"
-    findFiles $type | parallel cjxl "{}" "{.}.jxl"
+    find -type f -iname "*.$1" | parallel cjxl "{}" "{.}.jxl"
 }
 
+restoreTar() {
+    local backupFile=""
+    ls -l *.{tar,tar.zst}
+    read -p "Which tar file would you like to restore: " backupFile
+    sudo tar -P -xf "$backupFile"
+}
+
+if [[ -f /usr/bin/pacman ]] then
+    pacin() {
+        pacman -U *.$1
+    }
+    
+    cacheClear() {
+        find "$XDG_CACHE_HOME" -iregex '.*\.\(jsc\|qmlc\)' -type f -mtime +1 -delete
+        find "$XDG_CACHE_HOME" -iname "ksycoca6*" -type f -mtime +1 -delete
+        find "$XDG_CACHE_HOME/qtshadercache-x86_64-little_endian-lp64/" -name "*" -type f -mtime +1 -delete
+        find "$XDG_CACHE_HOME" -name "*.qsb" -mtime +7 -delete
+        find "$XDG_CACHE_HOME" -name "_qt_QGfxShaderBuilder_*" -delete
+        #find "$XDG_CACHE_HOME/qtshadercache/" -name "*" -type f -mtime +1 -delete
+        find "$XDG_CACHE_HOME/fontconfig/" -name "*" -type f -mtime +7 -delete
+        #rm -r $XDG_CACHE_HOME/python/*
+        echo "Cleared various cache files"
+    }
+    
+    storageCleanup() {
+        yay -Scc
+        sudo rm -r /var/log/*
+        echo "Cleared /var/log/"
+        sudo rm -r /var/cache/*
+        echo "Cleared /var/cache/"
+        sudo rm /var/lib/systemd/coredump/*
+        echo "Cleared /var/lib/systemd/coredump"
+        cacheClear
+        
+    }
+    
+    archBackup() {
+        # Get a timestamp
+        local timestamp=$(date +"%Y-%m-%d")
+        # Define the backup folder
+        local backupFolder="Arch Backup - $HOSTNAME - $timestamp"
+        local backupLocation="/mnt/NAS/Backup/Linux/Pacman"
+        # Create the backup folder
+        mkdir "$backupFolder"
+        # Create a text list of locally installed pacman packages
+        pacman -Qn | awk '{print $1}' > "$backupFolder"/pacman.txt
+        # Create a text list of locally installed aur packages
+        pacman -Qm | awk '{print $1}' > "$backupFolder"/aur.txt
+        # Compress the folder into a tar file
+        tar -I "zstd --ultra -22 -T$(nproc)" -cf "$backupFolder.tar.zst" "$backupFolder"
+        # Remove leftover folder and files
+        rm -r "$backupFolder"
+        if [[ -d $backupLocation ]] then
+            cp "$backupFolder.tar.zst" $backupLocation
+        else
+            scp "$backupFolder.tar.zst" $USER@nas:$backupLocation
+        fi
+    }
+fi
+
+resetDevice() {
+    local option=""
+    local module=""
+    local name=""
+    echo "Device Reset 1.0"
+    echo "1: Bluetooth               - btusb"
+    echo "2: Intel WiFi              - iwlmvm"
+    echo "3: Mediatek WiFi           - mt7921e"
+    echo "4: PlayStation Controllers - hid_playstation, hid_sony"
+    echo "5: Logitech Devices        - hid_logitech_dj, hid_logitech_hidp"
+    read -p "Option: " option
+    case $option in
+        1)
+            module="btusb" 
+            name="Bluetooth" 
+            ;;
+        2)
+            module="iwlmvm" 
+            name="Intel WiFi" 
+            ;;
+        3)
+            module="mt7921e" 
+            name="Meditek WiFi" 
+            ;;
+        4)
+            module="hid_playstation hid_sony" 
+            name="Playstation Controllers" 
+            ;;
+        5)
+            module="hid_logitech_dj hid_logitech_hidpp" 
+            name="Logitech Devices" 
+            ;;
+        *)
+            echo "Incorrect or no option chosen"
+            return
+    esac
+    echo "Resetting $name - module/s: $module"
+    sudo rmmod $module && sudo modprobe $module
+}
+
+# Media
+
 videoState() {
-    # $1 The file containing the list of videos
-    cat $1 | while read video
+# $1 The file containing the list of videos
+cat $1 | while read video
     do
-#       echo $video
-        if [[ -f "$video" ]]
-        then
-            mv $video $video.bak
+        if [[ -f "$video" ]] then
+            mv "$video" "$video".bak
             echo "Disabled $video"
-        elif [[ -f "$video.bak" ]]
-        then
-            mv $video.bak $video
+        elif [[ -f "$video.bak" ]] then
+            mv "$video".bak "$video"
             echo "Restored $video"
         else
-            echo "Video/s not found"
+            echo "Video not found: $video"
         fi
     done
 }
+
+toFlac() {
+    find -type f -iname "*.$1" | parallel ffmpeg -i "{}" -c:a flac -sample_fmt s32 "{.}.flac"
+}
+
+flacToOpus() {
+    find -type f -iname "*.flac" | parallel opusenc --bitrate $1 "{}" "{.}.opus"
+}
+
+tagMusic() {
+    case $1 in
+    "title")
+        kid3-cli -c "select *.opus" -c "totag '%{title}' 2" 
+        ;;
+    "album")
+        kid3-cli -c "select *.opus" -c "set Album '$2'" 
+        ;;
+    *)
+        echo "Argument must be title or album"
+    esac
+}
+
+if [[ -f /usr/lib/jellyfin-ffmpeg/ffmpeg ]] then
+    removeDolbyVision() {
+        mkvpropedit "$1" --delete-attachment mime-type:image/png
+        mkvpropedit "$1" --delete-attachment mime-type:image/jpeg
+        /usr/lib/jellyfin-ffmpeg/ffmpeg -y -hide_banner -stats -fflags +genpts+igndts -loglevel error -i "$1" -map 0 -bsf:v hevc_metadata=remove_dovi=1 -codec copy -max_muxing_queue_size 2048 -max_interleave_delta 0 -avoid_negative_ts disabled ../"$1"
+    }
+fi
 
 # Gaming
 
@@ -214,107 +276,23 @@ wineKill() {
 }
 
 downloadDirectX() {
+    mkdir {DXVK,VKD3D-Proton}
     curl -s https://api.github.com/repos/HansKristian-Work/vkd3d-proton/releases/latest | grep -o "https.*zst" | wget -i -
     curl -s https://api.github.com/repos/doitsujin/dxvk/releases/latest | grep -om 1 "https.*tar.gz" | wget -i -
+    tar -xf dxvk*.tar.gz -C DXVK --strip-components 1
+    tar -xf vkd3d*.tar.zst -C VKD3D-Proton --strip-components 1
+    rm dxvk*.tar.gz
+    rm vkd3d*.tar.zst
 }
 
-dx11() {
-    echo "Installing DXVK (DirectX 8,9,10,11)"
-    $HOME/Sync/Gaming/DXVK/setup_dxvk.sh install --symlink
+# Gaming-GPU
+
+passiveOndemand() {
+    sudo cpupower set --amd-pstate-mode passive
+    sudo cpupower frequency-set -g ondemand
 }
 
-dx12() {
-    echo "Installing VKD3D-Proton (DirectX 12)"
-    $HOME/Sync/Gaming/VKD3D-Proton/setup_vkd3d_proton.sh install --symlink
-}
-
-dxSetup() {
-    dx11
-    dx12
-}
-
-# Gaming-Emulation
-
-crom() {
-    case $1 in
-    "chdDVD")
-        findFiles2 iso bin | parallel chdman createdvd -f -i "{}" -o "{.}.chd" ;;
-    "chdCD")
-        findFiles cue | parallel chdman createcd -f -i "{}" -o "{.}.chd" ;;
-    *)
-        echo "Incorrect or no option chosen"
-    esac
-}
-
-crom7z() {
-    findFiles $1 | parallel --bar 7z a -mx9 "{.}.7z" "{}"
-
-}
-
-reCrom() {
-    ark --batch --autodestination *.7z
-    mvrom $1
-}
-
-mvrom() {
-    local type="$1"
-    local dest=""
-    case $1 in
-        "nes")
-            crom7z $type
-            type="7z"
-            dest="$HOME/Games/Emulation/ROMs/Nintendo/NES" ;;
-        "n64")
-            crom7z $type
-            type="7z"
-            dest="$HOME/Games/Emulation/ROMs/Nintendo/N64" ;;
-        "gba")
-            crom7z $type
-            type="7z"
-            dest="$HOME/Games/Emulation/ROMs/Nintendo/GBA" ;;
-        "nds")
-            crom7z $type
-            type="7z"
-            dest="$HOME/Games/Emulation/ROMs/Nintendo/DS" ;;
-        "3ds")
-            dest="$HOME/Games/Emulation/ROMs/Nintendo/3DS" ;;
-        "switch")
-            type="nsp"
-            dest="$HOME/Games/Emulation/ROMs/Nintendo/Switch" ;;
-        "ps1")
-            dest="$HOME/Games/Emulation/ROMs/Sony/PS1"
-            type="chdCD"
-            crom $type
-            type="chd" ;;
-        "ps2")
-            dest="$HOME/Games/Emulation/ROMs/Sony/PS2"
-            type="chdDVD"
-            crom $type
-            type="chd" ;;
-        "psp")
-            dest="$HOME/Games/Emulation/ROMs/Sony/PSP"
-            type="chdDVD"
-            crom $type
-            type="chd" ;;
-        *)
-            echo "Choose a file type!"
-            echo "n64    - Nintendo 64"
-            echo "gba    - GameBoy Advance"
-            echo "nds    - Nintendo DS"
-            echo "3ds    - Nintendo 3DS"
-            echo "switch - Nintendo Switch"
-            echo "ps1    - PlayStation 1"
-            echo "ps2    - PlayStation 2"
-            echo "psp    - PlayStation Portable"
-            return
-    esac
-    echo "Moving $1 files to $dest"
-    mv *.$type "$dest"
-}
-
-# Gaming-Misc
-
-changeGPUState() {
+changeGpuState() {
     local gpuLevel=/sys/class/drm/card1/device/power_dpm_force_performance_level
     echo "Current GPU Level: $(cat $gpuLevel)"
     echo "Setting GPU Level to $1"
@@ -322,173 +300,120 @@ changeGPUState() {
     echo "Current GPU Level: $(cat $gpuLevel)"
 }
 
-# Pi
-
-piBackupSettings() {
-    local backupFile="/srv/nfs/Backup/Linux/Raspberry Pi/Raspberry Pi Settings - $(date +"%Y-%m-%d").tar.zst"
-    local targets="/home/pi/.profile /home/pi/.bashrc /home/pi/.ssh/authorized_keys /etc/samba /etc/fstab /home/pi/.local/state/syncthing"
-    sudo tar -P -I "zstd --ultra -22 -T$(nproc)" -cf "$backupFile" $targets
+confirmGpuSettings() {
+    sudo sh -c "echo c > /sys/class/drm/card1/device/pp_od_clk_voltage"
+    echo "Applied new gpu settings"
 }
 
-jellyfinBackup() {
-    local backupFile="/srv/nfs/Backup/Linux/Raspberry Pi/Jellyfin Backup - $(date +"%Y-%m-%d").tar"
-    local targets="/var/lib/jellyfin /etc/jellyfin"
-    sudo tar -P -cf "$backupFile" $targets
+changeGpuVoltage() {
+    sudo sh -c "echo \"vo -120\" > /sys/class/drm/card1/device/pp_od_clk_voltage"
 }
 
-restoreTar() {
-    local backupFile=""
-    ls -l *.{tar,tar.zst}
-    read -p "Which tar file would you like to restore: " backupFile
-    sudo tar -P -xf "$backupFile"
+    changeGpuClockOffset() {
+    sudo sh -c "echo \"so -500\" > /sys/class/drm/card1/device/pp_od_clk_voltage"
 }
 
-# Git
+resetGpu() {
+    sudo sh -c "echo r > /sys/class/drm/card1/device/pp_od_clk_voltage"
+    confirmGpuSettings
+}
 
-buildMesa() {
-    local oldLocation=$PWD
-    cd "$HOME/Git/mesa"
-    git pull
-    git status
-    time ninja -C build64/ install
-    time ninja -C build32/ install
-    cd $oldLocation
-    rm -rf $HOME/.cache/mesa_shader_cache_sf
+fixGpuClock() {
+    sudo sh -c "echo s 0 $1 > /sys/class/drm/card1/device/pp_od_clk_voltage"
+    echo "Set minimum GPU clock to $1 MHz"
+    sudo sh -c "echo s 1 $1 > /sys/class/drm/card1/device/pp_od_clk_voltage"
+    echo "Set maximum GPU clock to $1 MHz"
+    confirmGpuSettings
+}
+
+# Misc
+
+nasBackup() {
+    timestamp=$(date +"%Y-%m-%d")
+    backupDir="/mnt/NAS/Backup/Auto/$timestamp"
+    mkdir "$backupDir"
+    backupFile="$backupDir/$1 - Backup - $timestamp.tar.zst"
+    tar -I "zstd --ultra -22 -T$(nproc)" -cf "$backupFile" "$2"
+}
+
+downloadPackage() {
+    pkgctl repo clone --protocol=https $1
+}
+
+patchKernel() {
+    local patches="$SYNC_DIR/Config/Kernel/$1"
+    cp $patches/tsc.patch tsc.patch
+    patch -i $patches/PKGBUILD.patch PKGBUILD
+}
+
+buildKernel() {
+    local kernel=""
+    echo "Kernel with TSC Patch builder"
+    echo "1: linux"
+    echo "2: linux-lts"
+    read -p "Choose a kernel to build: " kernel
+    if [[ $kernel == 1 ]] then
+        kernel="linux"
+    elif [[ $kernel == 2 ]] then
+        kernel="linux-lts"
+    fi
+    downloadPackage $kernel
+    cd $kernel
+    patchKernel $kernel
+    mPkg
+    cd ../
+    sudo rm -r $kernel
 }
 
 configureMesa() {
     local oldLocation=$PWD
     local option=""
-    local mesaSync="$HOME/Sync/Gaming/Mesa"
+    local mesaSync=$MESA_GIT_DIR/Git
+    local message="Configured for "
+    local setup64cmd="meson setup --reconfigure build64 --libdir lib64 --prefix $mesaSync -Dbuildtype=release -Dvideo-codecs= -Dvulkan-drivers=amd -Dllvm=disabled -Dgallium-drivers"
+    local setup32cmd="meson setup --reconfigure build32 --cross-file gcc-i686 --libdir lib --prefix $mesaSync -Dbuildtype=release -Dvulkan-drivers=amd -Dllvm=disabled -Dgallium-drivers"
     echo "Mesa Configurator 1.0"
-    echo "1: RADV"
-    echo "2: RADV+Zink"
-    echo "3: RADV+Zink+ACO"
+    echo "1: RADV 64-Bit"
+    echo "2: RADV 32+64-Bit"
+    echo "3: RADV+Zink 32+64-Bit"
     read -p "Choose an option: " option
-    cd "$HOME/Git/mesa"
+    cd "$MESA_GIT_SRC"
     case $option in
     1)
-        meson setup --reconfigure build64 --libdir lib64 --prefix $mesaSync -Dbuildtype=release -Dgallium-drivers= -Dvulkan-drivers=amd -Dllvm=disabled
-        meson setup --reconfigure build32 --cross-file gcc-i686 --libdir lib --prefix $mesaSync -Dgallium-drivers= -Dvulkan-drivers=amd -Dllvm=disabled -Dbuildtype=release
-        echo "Configured for RADV" ;;
+        # = completes the build command
+        setup64cmd+="="
+        message+="RADV 64-Bit"
+        rm -r $MESA_GIT_SRC/build32/
+        ;;
     2)
-        meson setup --reconfigure build64 --libdir lib64 --prefix $mesaSync -Dbuildtype=release -Dgallium-drivers=zink -Dvulkan-drivers=amd -Dllvm=disabled
-        meson setup --reconfigure build32 --cross-file gcc-i686 --libdir lib --prefix $mesaSync -Dgallium-drivers=zink -Dvulkan-drivers=amd -Dllvm=disabled -Dbuildtype=release
-        rm -rf $mesaSync/*
-        echo "Configured for RADV+Zink" ;;
-    3)        
-        meson setup --reconfigure build64 --libdir lib64 --prefix $mesaSync -Dbuildtype=release -Dgallium-drivers=radeonsi,zink -Dvulkan-drivers=amd -Dllvm=disabled
-        meson setup --reconfigure build32 --cross-file gcc-i686 --libdir lib --prefix $mesaSync -Dgallium-drivers=radeonsi,zink -Dvulkan-drivers=amd -Dllvm=disabled -Dbuildtype=release
-        rm -rf $mesaSync/* ;;
-    *)
-        echo "Incorrect or no option chosen"
-    esac
-    cd $oldLocation
-}
-
-# Misc
-
-buildLinuxTSC() {
-    local patches="$HOME/Sync/Config/Kernel/"
-    local kernel=""
-    echo "1: linux"
-    echo "2: linux-lts"
-    read -p "Which kernel would you like to build? " kernel
-    case $kernel in
-    1)
-        kernel="linux" ;;
-    2)
-        kernel="linux-lts" ;;
+        # = completes the build command
+        setup64cmd+="="
+        setup32cmd+="="
+        message+="RADV 32+64-Bit"
+        $setup32cmd
+        ;;
+    3)
+        # =zink completes the build command
+        setup64cmd+="=zink"
+        setup32cmd+="=zink"
+        message+="RADV+Zink 32+64-Bit" 
+        $setup32cmd
+        ;;
     *)
         echo "Incorrect or no option chosen"
         return
     esac
-    pkgctl repo clone --protocol=https $kernel
-    cd $kernel
-    cp $patches/tsc.patch tsc.patch
-    patch -i $patches/$kernel.patch PKGBUILD
-    time makepkg --syncdeps --skipinteg
+
+    $setup64cmd
+    echo $message
+    cd $oldLocation
 }
 
-printAfter() {
-    string=$1
-    searchstring="$2"
-    result=${string#*$searchstring}
-    echo $result
-}
-
-isInstalled() {
-    if [[ -f $1 ]]
-    then
-        echo "Installed"
-    else
-        echo "Not installed";
-    fi
-}
-
-sysCheck() {
-    local kernelVersion=$(uname -r)
-    local glibcVersion=$(ldd --version | grep ldd | awk '{print $4}')
-    local maxMapCount=$(cat /proc/sys/vm/max_map_count)
-    local limitNOFILE=$(ulimit -Hn)
-    local steamUdevRules=$(isInstalled /usr/lib/udev/rules.d/70-steam-input.rules)
-    local cpufreq=/sys/devices/system/cpu/cpu0/cpufreq/
-    local scaleGov=$(cat $cpufreq/scaling_governor)
-    local scaleDriver=$(cat $cpufreq/scaling_driver)
-    local turboBoost="$(if [[ $(cat $cpufreq/boost) == 1 ]]; then echo "On"; else echo "Off"; fi)"
-    local amdPstateMode=$(cat /sys/devices/system/cpu/amd_pstate/status)
-    local eppPref="$(if [ -f $cpufreq/energy_performance_preference ]; then cat $cpufreq/energy_performance_preference; else echo "N/A"; fi)"
-    local clocksource="$(cat /sys/devices/system/clocksource/clocksource0/current_clocksource)"
-    local gpuLevel=$(cat /sys/class/drm/card1/device/power_dpm_force_performance_level)
-    local gpuName=$(printAfter "$(DRI_PRIME=1! vulkaninfo --summary | grep -m 1 "deviceName")" "= ")
-    local gpuVram=$(DRI_PRIME=1! glxinfo -B | grep "Dedicated video memory:" | awk 'NR==1 { print $4 }')
-    local mesaVersion=$(vulkaninfo | grep driverVersion | awk 'NR==1 { print $3 }')
-    local llvmVersion=$(llvm-config --version)
-    local openglVersion=$(glxinfo | grep "OpenGL core profile version string" | awk '{ print $6 }')
-    local vulkanVersion=$(vulkaninfo | grep apiVersion | awk 'NR==1 { print $3 }')
-    local mangohudCheck=$(if [[ -f /usr/bin/mangohud ]]; then mangohud --version | cut -c 2-; else echo "Not installed"; fi)
-    local gamemodeCheck=$(if [[ -f /usr/bin/gamemoded ]]; then gamemoded -v | awk '{ print $3 }' | cut -c 2-; else echo "Not installed"; fi )
-    local gamescopeCheck=$(isInstalled /usr/bin/gamescope)
-    
-    echo "System Check V2.11"
-    echo
-    echo "System"
-    echo "......................"
-    echo "Kernel               : $kernelVersion"
-    echo "glibc                : $glibcVersion"
-    echo "vm.max_map_count     : $maxMapCount"
-    echo "DefaultLimitNOFILE   : $limitNOFILE"
-    echo "Steam udev rules     : $steamUdevRules"
-    echo
-    echo "CPU"
-    echo "......................"
-    echo "Scaling Governor     : $scaleGov"
-    echo "Scaling Driver       : $scaleDriver"
-    echo "Turbo Boost          : $turboBoost"
-    echo "AMD P-State Mode     : $amdPstateMode"
-    echo "EPP Preference       : $eppPref"
-    echo "Clocksource          : $clocksource"
-    echo
-    echo "GPU"
-    echo "......................"
-    echo "Name                 : $gpuName"
-    echo "VRAM                 : $gpuVram MB"
-    echo "Mesa                 : $mesaVersion"
-    echo "LLVM                 : $llvmVersion"
-    echo "OpenGL               : $openglVersion"
-    echo "Vulkan               : $vulkanVersion"
-    echo "AMDGPU Perf Level    : $gpuLevel"
-    echo
-    echo "Utilities"
-    echo "......................"
-    echo "MangoHud             : $mangohudCheck"
-    echo "Feral GameMode       : $gamemodeCheck"
-    echo "Gamescope            : $gamescopeCheck"
-}
-
-
-test_amd_s2idle() {
-    mkcd amd_s2idle
-    wget https://gitlab.freedesktop.org/drm/amd/-/raw/master/scripts/amd_s2idle.py
-    sudo python amd_s2idle.py
+buildMesa() {
+    git -C $MESA_GIT_SRC pull
+    git -C $MESA_GIT_SRC status
+    time ninja -C $MESA_GIT_SRC/build64/ install
+#        time ninja -C $MESA_GIT_SRC/build32/ install
+    delete $MESA_GIT_DIR/Git/mesa_shader_cache_sf
+    delete $MESA_GIT_DIR/Git/radv_builtin_shaders
 }
