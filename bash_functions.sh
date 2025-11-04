@@ -42,13 +42,17 @@ delete() {
     fi
 }
 
-sendTo() {
-    scp $2 $USER@$1:$HOME/Downloads
-}
-
 dockerKill() {
     docker kill $1
     docker rm $1
+    docker container prune
+}
+
+dockerUpdate() {
+    dockerFile="$SYNC_DIR/Scripts/Docker/docker-compose.yaml"
+    docker-compose -f $dockerFile pull
+    docker-compose -f $dockerFile up -d
+    docker image prune -af
 }
 
 debugLogs() {
@@ -87,8 +91,11 @@ mkvDefaultTrackBatch() {
     read -p "Default track type: audio or subtitle (a/s): " trackType
     read -p "Choose a track number: " trackNum
     read -p "Set the track number as default? (0,1): " trackDef
-    read -p "Set the track number as forced (0,1) " trackForced
-    find -type f -iname "*.mkv" | parallel mkvDefaultTrack "{}" $trackType $trackNum $trackDef $trackForced
+    
+    find -type f -iname "*.mkv" | while read film
+        do
+            mkvpropedit "$film" --edit track:$trackType$trackNum --set flag-default=$trackDef
+        done
 }
 
 downsampleAudio() {
@@ -126,35 +133,36 @@ restoreTar() {
     sudo tar -P -xf "$backupFile"
 }
 
+cacheClear() {
+    find "$XDG_CACHE_HOME" -iregex '.*\.\(jsc\|qmlc\)' -type f -mtime +1 -delete
+    find "$XDG_CACHE_HOME" -iname "ksycoca6*" -type f -mtime +1 -delete
+    find "$XDG_CACHE_HOME/qtshadercache-x86_64-little_endian-lp64/" -name "*" -type f -mtime +1 -delete
+    find "$XDG_CACHE_HOME" -name "*.qsb" -mtime +7 -delete
+    find "$XDG_CACHE_HOME/mpv" -name "*" -mtime +7 -delete
+    find "$XDG_CACHE_HOME/bunkus.org/mkvtoolnix-gui/fileIdentifier" -name "*" -mtime +7 -delete
+    find "$XDG_CACHE_HOME" -name "_qt_QGfxShaderBuilder_*" -mtime +7 | xargs rm -r
+    #find "$XDG_CACHE_HOME/qtshadercache/" -name "*" -type f -mtime +1 -delete
+    find "$XDG_CACHE_HOME/fontconfig/" -name "*" -type f -mtime +7 -delete
+    #rm -r $XDG_CACHE_HOME/python/*
+    echo "Cleared various cache files"
+}
+
+storageCleanup() {
+    yay -Scc
+    sudo rm -r /var/log/*
+    echo "Cleared /var/log/"
+    sudo rm -r /var/cache/*
+    echo "Cleared /var/cache/"
+    sudo rm /var/lib/systemd/coredump/*
+    echo "Cleared /var/lib/systemd/coredump"
+    cacheClear     
+}
+
 if [[ -f /usr/bin/pacman ]] then
     pacin() {
-        pacman -U *.$1
+        sudo pacman -U *.$1
     }
-    
-    cacheClear() {
-        find "$XDG_CACHE_HOME" -iregex '.*\.\(jsc\|qmlc\)' -type f -mtime +1 -delete
-        find "$XDG_CACHE_HOME" -iname "ksycoca6*" -type f -mtime +1 -delete
-        find "$XDG_CACHE_HOME/qtshadercache-x86_64-little_endian-lp64/" -name "*" -type f -mtime +1 -delete
-        find "$XDG_CACHE_HOME" -name "*.qsb" -mtime +7 -delete
-        find "$XDG_CACHE_HOME" -name "_qt_QGfxShaderBuilder_*" -delete
-        #find "$XDG_CACHE_HOME/qtshadercache/" -name "*" -type f -mtime +1 -delete
-        find "$XDG_CACHE_HOME/fontconfig/" -name "*" -type f -mtime +7 -delete
-        #rm -r $XDG_CACHE_HOME/python/*
-        echo "Cleared various cache files"
-    }
-    
-    storageCleanup() {
-        yay -Scc
-        sudo rm -r /var/log/*
-        echo "Cleared /var/log/"
-        sudo rm -r /var/cache/*
-        echo "Cleared /var/cache/"
-        sudo rm /var/lib/systemd/coredump/*
-        echo "Cleared /var/lib/systemd/coredump"
-        cacheClear
         
-    }
-    
     archBackup() {
         # Get a timestamp
         local timestamp=$(date +"%Y-%m-%d")
@@ -222,8 +230,8 @@ resetDevice() {
 # Media
 
 videoState() {
-# $1 The file containing the list of videos
-cat $1 | while read video
+    # $1 The file containing the list of videos
+    cat $1 | while read video
     do
         if [[ -f "$video" ]] then
             mv "$video" "$video".bak
@@ -262,7 +270,7 @@ if [[ -f /usr/lib/jellyfin-ffmpeg/ffmpeg ]] then
     removeDolbyVision() {
         mkvpropedit "$1" --delete-attachment mime-type:image/png
         mkvpropedit "$1" --delete-attachment mime-type:image/jpeg
-        /usr/lib/jellyfin-ffmpeg/ffmpeg -y -hide_banner -stats -fflags +genpts+igndts -loglevel error -i "$1" -map 0 -bsf:v hevc_metadata=remove_dovi=1 -codec copy -max_muxing_queue_size 2048 -max_interleave_delta 0 -avoid_negative_ts disabled ../"$1"
+        /usr/lib/jellyfin-ffmpeg/ffmpeg -y -hide_banner -stats -fflags +genpts+igndts -loglevel error -i "$1" -map 0 -bsf:v hevc_metadata=remove_dovi=1 -codec copy -max_muxing_queue_size 2048 -max_interleave_delta 0 -avoid_negative_ts disabled "${1%.*}-nodv.mkv"
     }
 fi
 
@@ -275,55 +283,52 @@ wineKill() {
     killall -9 pressure-vessel-adverb
 }
 
-downloadDirectX() {
-    mkdir {DXVK,VKD3D-Proton}
-    curl -s https://api.github.com/repos/HansKristian-Work/vkd3d-proton/releases/latest | grep -o "https.*zst" | wget -i -
-    curl -s https://api.github.com/repos/doitsujin/dxvk/releases/latest | grep -om 1 "https.*tar.gz" | wget -i -
-    tar -xf dxvk*.tar.gz -C DXVK --strip-components 1
-    tar -xf vkd3d*.tar.zst -C VKD3D-Proton --strip-components 1
+githubDownload() {
+    wcurl $(curl -s $1 | jq -r .assets.[].browser_download_url)
+}
+
+downloadProtonGE() {
+    local jsonURL="https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/latest"
+    local dest="$HOME/Games/Steam/compatibilitytools.d/GE-Proton-latest"
+    sudo rm -r "$dest"
+    wcurl $(curl -s "$jsonURL" | jq -r .assets.[].browser_download_url | grep tar.zst)
+    mkdir "$dest"
+    tar -xf GE-Proton*.tar.zst -C "$dest" --strip-components 1
+    ln -s $HOME/Sync/Config/Gaming/Steam/user_settings.py "$dest"/user_settings.py
+    rm GE-Proton*.tar.zst
+}
+
+downloadDXVK() {
+    githubDownload "https://api.github.com/repos/doitsujin/dxvk/releases/latest"
+    tar -xf dxvk*.tar.gz -C $HOME/Games/DirectX/DXVK --strip-components 1
     rm dxvk*.tar.gz
+}
+
+downloadVKD3D() {
+    githubDownload "https://api.github.com/repos/HansKristian-Work/vkd3d-proton/releases/latest"
+    tar -xf vkd3d*.tar.zst -C $HOME/Games/DirectX/VKD3D-Proton --strip-components 1
     rm vkd3d*.tar.zst
+}
+
+downloadDirectX() {
+    downloadDXVK
+    downloadVKD3D
 }
 
 # Gaming-GPU
 
-passiveOndemand() {
-    sudo cpupower set --amd-pstate-mode passive
-    sudo cpupower frequency-set -g ondemand
-}
-
 changeGpuState() {
-    local gpuLevel=/sys/class/drm/card1/device/power_dpm_force_performance_level
+    local gpuLevel="/sys/class/drm/card1/device/power_dpm_force_performance_level"
     echo "Current GPU Level: $(cat $gpuLevel)"
     echo "Setting GPU Level to $1"
-    sudo sh -c "echo $1 > $gpuLevel"
+    echo $1 | sudo tee "$gpuLevel" > /dev/null
     echo "Current GPU Level: $(cat $gpuLevel)"
-}
-
-confirmGpuSettings() {
-    sudo sh -c "echo c > /sys/class/drm/card1/device/pp_od_clk_voltage"
-    echo "Applied new gpu settings"
-}
-
-changeGpuVoltage() {
-    sudo sh -c "echo \"vo -120\" > /sys/class/drm/card1/device/pp_od_clk_voltage"
-}
-
-    changeGpuClockOffset() {
-    sudo sh -c "echo \"so -500\" > /sys/class/drm/card1/device/pp_od_clk_voltage"
 }
 
 resetGpu() {
-    sudo sh -c "echo r > /sys/class/drm/card1/device/pp_od_clk_voltage"
-    confirmGpuSettings
-}
-
-fixGpuClock() {
-    sudo sh -c "echo s 0 $1 > /sys/class/drm/card1/device/pp_od_clk_voltage"
-    echo "Set minimum GPU clock to $1 MHz"
-    sudo sh -c "echo s 1 $1 > /sys/class/drm/card1/device/pp_od_clk_voltage"
-    echo "Set maximum GPU clock to $1 MHz"
-    confirmGpuSettings
+    gpuCfgFile="/sys/class/drm/card1/device/pp_od_clk_voltage"
+    echo "r" > sudo tee $gpuCfgFile > /dev/null
+    echo "c" > sudo tee $gpuCfgFile > /dev/null
 }
 
 # Misc
@@ -336,84 +341,35 @@ nasBackup() {
     tar -I "zstd --ultra -22 -T$(nproc)" -cf "$backupFile" "$2"
 }
 
-downloadPackage() {
-    pkgctl repo clone --protocol=https $1
-}
-
-patchKernel() {
-    local patches="$SYNC_DIR/Config/Kernel/$1"
-    cp $patches/tsc.patch tsc.patch
-    patch -i $patches/PKGBUILD.patch PKGBUILD
-}
-
-buildKernel() {
-    local kernel=""
-    echo "Kernel with TSC Patch builder"
-    echo "1: linux"
-    echo "2: linux-lts"
-    read -p "Choose a kernel to build: " kernel
-    if [[ $kernel == 1 ]] then
-        kernel="linux"
-    elif [[ $kernel == 2 ]] then
-        kernel="linux-lts"
-    fi
-    downloadPackage $kernel
-    cd $kernel
-    patchKernel $kernel
-    mPkg
-    cd ../
-    sudo rm -r $kernel
-}
-
-configureMesa() {
-    local oldLocation=$PWD
-    local option=""
-    local mesaSync=$MESA_GIT_DIR/Git
-    local message="Configured for "
-    local setup64cmd="meson setup --reconfigure build64 --libdir lib64 --prefix $mesaSync -Dbuildtype=release -Dvideo-codecs= -Dvulkan-drivers=amd -Dllvm=disabled -Dgallium-drivers"
-    local setup32cmd="meson setup --reconfigure build32 --cross-file gcc-i686 --libdir lib --prefix $mesaSync -Dbuildtype=release -Dvulkan-drivers=amd -Dllvm=disabled -Dgallium-drivers"
-    echo "Mesa Configurator 1.0"
-    echo "1: RADV 64-Bit"
-    echo "2: RADV 32+64-Bit"
-    echo "3: RADV+Zink 32+64-Bit"
-    read -p "Choose an option: " option
-    cd "$MESA_GIT_SRC"
-    case $option in
-    1)
-        # = completes the build command
-        setup64cmd+="="
-        message+="RADV 64-Bit"
-        rm -r $MESA_GIT_SRC/build32/
-        ;;
-    2)
-        # = completes the build command
-        setup64cmd+="="
-        setup32cmd+="="
-        message+="RADV 32+64-Bit"
-        $setup32cmd
-        ;;
-    3)
-        # =zink completes the build command
-        setup64cmd+="=zink"
-        setup32cmd+="=zink"
-        message+="RADV+Zink 32+64-Bit" 
-        $setup32cmd
-        ;;
-    *)
-        echo "Incorrect or no option chosen"
-        return
-    esac
-
-    $setup64cmd
-    echo $message
-    cd $oldLocation
-}
-
-buildMesa() {
-    git -C $MESA_GIT_SRC pull
-    git -C $MESA_GIT_SRC status
-    time ninja -C $MESA_GIT_SRC/build64/ install
-#        time ninja -C $MESA_GIT_SRC/build32/ install
-    delete $MESA_GIT_DIR/Git/mesa_shader_cache_sf
-    delete $MESA_GIT_DIR/Git/radv_builtin_shaders
-}
+if [[ -f /usr/bin/pkgctl ]] then
+    downloadArchPackage() {
+        pkgctl repo clone --protocol=https $1
+    }
+    
+    patchKernel() {
+        local patches="$SYNC_DIR/Config/Kernel/$1"
+        cp $patches/tsc.patch tsc.patch
+        patch -i $patches/PKGBUILD.patch PKGBUILD
+    }
+    
+    buildKernel() {
+        local option="" 
+        local kernel=""
+        echo "Kernel with TSC Patch builder"
+        echo "1: linux"
+        echo "2: linux-lts"
+        read -p "Choose a kernel to build: " option
+        if [[ $option == 1 ]] then
+            kernel="linux"
+        elif [[ $option == 2 ]] then
+            kernel="linux-lts"
+        fi
+        sudo rm -r $kernel
+        downloadArchPackage $kernel
+        cd $kernel
+        patchKernel $kernel
+        makepkg -s --skipinteg --asdeps
+        cd ../
+        sudo rm -r $kernel
+    }
+fi
