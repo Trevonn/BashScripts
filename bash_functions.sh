@@ -10,12 +10,6 @@ nvmeHealth() {
     sudo nvme smart-log -H /dev/nvme$1
 }
 
-firmwareUpdate() {
-    fwupdmgr refresh --force
-    fwupdmgr get-updates
-    fwupdmgr update
-}
-
 to7z() {
     7z a -mx9 "${1%.$2}.7z" "$1"
 }
@@ -55,21 +49,6 @@ dockerUpdate() {
     docker image prune -af
 }
 
-debugLogs() {
-    mkdir debugLogs
-    cd debugLogs
-    dmesg > dmesg.log
-    journalctl -b > journalctl.log
-    glxinfo > glxinfo.log
-    vulkaninfo > vulkaninfo.log
-    lsusb > lsusb.log
-    lspci > lspci.log
-    sudo fdisk -l > fdisk.log
-    cd ../
-    zip -9 debugLogs.zip debugLogs/*
-    rm -R debugLogs
-}
-
 downloadMusic() {
     yt-dlp --format 251 --extract-audio --audio-format "opus" $1 -o "%(title)s.%(ext)s"
 }
@@ -98,7 +77,7 @@ mkvDefaultTrackBatch() {
         done
 }
 
-downsampleAudio() {
+downsampleMovieAudio() {
     mkdir Muxed
     find -type f -iname "$1" | parallel ffmpeg -y -i "{}" -map 0 -c copy -c:a:0 aac -b:a:0 256k -ac 2 "Muxed/{}"
 }
@@ -126,24 +105,13 @@ toJxl() {
     find -type f -iname "*.$1" | parallel cjxl "{}" "{.}.jxl"
 }
 
-restoreTar() {
-    local backupFile=""
-    ls -l *.{tar,tar.zst}
-    read -p "Which tar file would you like to restore: " backupFile
-    sudo tar -P -xf "$backupFile"
-}
-
 cacheClear() {
     find "$XDG_CACHE_HOME" -iregex '.*\.\(jsc\|qmlc\)' -type f -mtime +1 -delete
     find "$XDG_CACHE_HOME" -iname "ksycoca6*" -type f -mtime +1 -delete
     find "$XDG_CACHE_HOME/qtshadercache-x86_64-little_endian-lp64/" -name "*" -type f -mtime +1 -delete
     find "$XDG_CACHE_HOME" -name "*.qsb" -mtime +7 -delete
-    find "$XDG_CACHE_HOME/mpv" -name "*" -mtime +7 -delete
-    find "$XDG_CACHE_HOME/bunkus.org/mkvtoolnix-gui/fileIdentifier" -name "*" -mtime +7 -delete
     find "$XDG_CACHE_HOME" -name "_qt_QGfxShaderBuilder_*" -mtime +7 | xargs rm -r
-    #find "$XDG_CACHE_HOME/qtshadercache/" -name "*" -type f -mtime +1 -delete
     find "$XDG_CACHE_HOME/fontconfig/" -name "*" -type f -mtime +7 -delete
-    #rm -r $XDG_CACHE_HOME/python/*
     echo "Cleared various cache files"
 }
 
@@ -245,6 +213,21 @@ videoState() {
     done
 }
 
+rencode10() {
+    # if the input file is mkv output the file in a different directory
+    if [[ $1 != "mkv" ]] then
+        dest="."
+    else
+        dest="Re-Encoded"
+        mkdir $dest
+    fi
+    
+    find -type f -name "*.$1" | while read video
+    do  
+        ffmpeg -nostdin -vaapi_device /dev/dri/renderD128 -i "$video" -vf 'format=nv12,hwupload' -c:v av1_vaapi -b:v 10M -c:a copy "$dest/${video%.*}.mkv"
+    done
+}
+
 toFlac() {
     find -type f -iname "*.$1" | parallel ffmpeg -i "{}" -c:a flac -sample_fmt s32 "{.}.flac"
 }
@@ -284,14 +267,13 @@ wineKill() {
 }
 
 githubDownload() {
-    wcurl $(curl -s $1 | jq -r .assets.[].browser_download_url)
+    wcurl $(curl -s $2 | jq -r .assets.[].browser_download_url | grep $1)
 }
 
 downloadProtonGE() {
-    local jsonURL="https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/latest"
-    local dest="$HOME/Games/Steam/compatibilitytools.d/GE-Proton-latest"
+    local dest="$HOME/.local/share/Steam/compatibilitytools.d/GE-Proton-latest"
     sudo rm -r "$dest"
-    wcurl $(curl -s "$jsonURL" | jq -r .assets.[].browser_download_url | grep tar.zst)
+    githubDownload .zst https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/latest
     mkdir "$dest"
     tar -xf GE-Proton*.tar.zst -C "$dest" --strip-components 1
     ln -s $HOME/Sync/Config/Gaming/Steam/user_settings.py "$dest"/user_settings.py
@@ -299,13 +281,13 @@ downloadProtonGE() {
 }
 
 downloadDXVK() {
-    githubDownload "https://api.github.com/repos/doitsujin/dxvk/releases/latest"
+    githubDownload .gz "https://api.github.com/repos/doitsujin/dxvk/releases/latest"
     tar -xf dxvk*.tar.gz -C $HOME/Games/DirectX/DXVK --strip-components 1
     rm dxvk*.tar.gz
 }
 
 downloadVKD3D() {
-    githubDownload "https://api.github.com/repos/HansKristian-Work/vkd3d-proton/releases/latest"
+    githubDownload .zst "https://api.github.com/repos/HansKristian-Work/vkd3d-proton/releases/latest"
     tar -xf vkd3d*.tar.zst -C $HOME/Games/DirectX/VKD3D-Proton --strip-components 1
     rm vkd3d*.tar.zst
 }
@@ -326,9 +308,17 @@ changeGpuState() {
 }
 
 resetGpu() {
-    gpuCfgFile="/sys/class/drm/card1/device/pp_od_clk_voltage"
+    local gpuCfgFile="/sys/class/drm/card1/device/pp_od_clk_voltage"
     echo "r" > sudo tee $gpuCfgFile > /dev/null
     echo "c" > sudo tee $gpuCfgFile > /dev/null
+}
+
+gpuPowerCap() {
+    local powerCap="$(find /sys/class/drm/card1/device/hwmon -type f -name power1_cap)"
+
+    if [[ -f "$powerCap" ]] then
+        cat "$powerCap"
+    fi
 }
 
 # Misc
