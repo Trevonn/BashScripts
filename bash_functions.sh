@@ -6,15 +6,15 @@ mkcd() {
     mkdir -p -- "$1" && cd -P -- "$1"
 }
 
-nvmeHealth() {
+nvme_health() {
     sudo nvme smart-log -H /dev/nvme$1
 }
 
-to7z() {
+to_7z() {
     7z a -mx9 "${1%.$2}.7z" "$1"
 }
 
-toZst() {
+to_zst() {
     tar -I "zstd --ultra -22 -T$(nproc)" -cf $1.tar.zst $1
 }
 
@@ -36,76 +36,75 @@ delete() {
     fi
 }
 
-dockerKill() {
+docker_kill() {
     docker kill $1
     docker rm $1
     docker container prune
 }
 
-dockerUpdate() {
+docker_update() {
     dockerFile="$SYNC_DIR/Scripts/Docker/docker-compose.yaml"
     docker-compose -f $dockerFile pull
     docker-compose -f $dockerFile up -d
     docker image prune -af
 }
 
-downloadMusic() {
+download_music() {
     yt-dlp --format 251 --extract-audio --audio-format "opus" $1 -o "%(title)s.%(ext)s"
 }
 
-mkvDefaultTrack() {
+mkv_default_track() {
     mkvpropedit $1 --edit track:$2$3 --set flag-default=$4 --set flag-forced=$5
 }
 
-mkvDefaultTrackBatch() {
+mkv_default_track_batch() {
     echo "MKV Default Track Changer Batch 1.0"
     echo "This script lets you change the default track properties in an MKV"
     echo
-    local trackType=""
-    local trackNum=""
-    local trackDef=""
-    local trackForced=""
+    local track_type=""
+    local track_num=""
+    local track_default=""
 
     echo "MKV Default Track Selector"
-    read -p "Default track type: audio or subtitle (a/s): " trackType
-    read -p "Choose a track number: " trackNum
-    read -p "Set the track number as default? (0,1): " trackDef
-    
+    read -p "Default track type: audio or subtitle (a/s): " track_type
+    read -p "Choose a track number: " track_num
+    read -p "Set the track number as default? (0,1): " track_default
+
     find -type f -iname "*.mkv" | while read film
         do
-            mkvpropedit "$film" --edit track:$trackType$trackNum --set flag-default=$trackDef
+            mkvpropedit "$film" --edit track:$track_type$track_num --set flag-default=$track_default
         done
 }
 
-downsampleMovieAudio() {
+downsample_video_audio() {
     mkdir Muxed
     find -type f -iname "$1" | parallel ffmpeg -y -i "{}" -map 0 -c copy -c:a:0 aac -b:a:0 256k -ac 2 "Muxed/{}"
 }
 
-toMKV() {
+to_mkv() {
     find -type f -iname "*.$1" | parallel mkvmerge -o "{.}.mkv" "{}"
 }
 
-removeTracks() {
+remove_tracks() {
     mkvmerge -o "Muxed/$1" -a $2 -s $3 "$1"
 }
 
-batchRemoveTracks() {
+batch_remove_tracks() {
     # Audio and Subtitle tracks not chosen by $1 and $2 will be removed
     find -type f -iname "*.mkv" | parallel mkvmerge -o "Muxed/{}" -a $1 -s $2 "{}"
 }
 
-addSubs() {
-    local videoExt=""
+add_subs() {
+    local video_ext=""
     read -p "Video File Extension Type: " videoExt
     find -type f -iname "*.$videoExt" | parallel mkvmerge -o "Muxed/{.}.mkv" "{}" "{.}"*.srt
 }
 
-toJxl() {
+to_jxl() {
     find -type f -iname "*.$1" | parallel cjxl "{}" "{.}.jxl"
 }
 
-storageCleanup() {
+storage_cleanup() {
     yay -Scc
     sudo rm -r /var/log/*
     echo "Cleared /var/log/"
@@ -113,39 +112,38 @@ storageCleanup() {
     echo "Cleared /var/cache/"
     sudo rm /var/lib/systemd/coredump/*
     echo "Cleared /var/lib/systemd/coredump"
-    cacheClear     
 }
 
 if [[ -f /usr/bin/pacman ]] then
     pacin() {
         sudo pacman -U *.$1
     }
-        
-    archBackup() {
+
+    arch_backup() {
         # Get a timestamp
         local timestamp=$(date +"%Y-%m-%d")
         # Define the backup folder
-        local backupFolder="Arch Backup - $HOSTNAME - $timestamp"
-        local backupLocation="/mnt/NAS/Backup/Linux/Pacman"
+        local backup_folder="Arch Backup - $HOSTNAME - $timestamp"
+        local backup_location="/mnt/NAS/Backup/Linux/Pacman"
         # Create the backup folder
-        mkdir "$backupFolder"
+        mkdir "$backup_folder"
         # Create a text list of locally installed pacman packages
-        pacman -Qn | awk '{print $1}' > "$backupFolder"/pacman.txt
+        pacman -Qn | awk '{print $1}' > "$backup_folder"/pacman.txt
         # Create a text list of locally installed aur packages
-        pacman -Qm | awk '{print $1}' > "$backupFolder"/aur.txt
+        pacman -Qm | awk '{print $1}' > "$backup_folder"/aur.txt
         # Compress the folder into a tar file
-        tar -I "zstd --ultra -22 -T$(nproc)" -cf "$backupFolder.tar.zst" "$backupFolder"
+        tar -I "zstd --ultra -22 -T$(nproc)" -cf "$backup_folder.tar.zst" "$backup_folder"
         # Remove leftover folder and files
-        rm -r "$backupFolder"
-        if [[ -d $backupLocation ]] then
-            cp "$backupFolder.tar.zst" $backupLocation
+        rm -r "$backup_folder"
+        if [[ -d $backup_location ]] then
+            cp "$backup_folder.tar.zst" $backup_location
         else
-            scp "$backupFolder.tar.zst" $USER@nas:$backupLocation
+            scp "$backup_folder.tar.zst" $USER@nas:$backup_location
         fi
     }
 fi
 
-resetDevice() {
+reset_device() {
     local option=""
     local module=""
     local name=""
@@ -158,24 +156,24 @@ resetDevice() {
     read -p "Option: " option
     case $option in
         1)
-            module="btusb" 
-            name="Bluetooth" 
+            module="btusb"
+            name="Bluetooth"
             ;;
         2)
-            module="iwlmvm" 
-            name="Intel WiFi" 
+            module="iwlmvm"
+            name="Intel WiFi"
             ;;
         3)
-            module="mt7921e" 
-            name="Meditek WiFi" 
+            module="mt7921e"
+            name="Meditek WiFi"
             ;;
         4)
-            module="hid_playstation hid_sony" 
-            name="Playstation Controllers" 
+            module="hid_playstation hid_sony"
+            name="Playstation Controllers"
             ;;
         5)
-            module="hid_logitech_dj hid_logitech_hidpp" 
-            name="Logitech Devices" 
+            module="hid_logitech_dj hid_logitech_hidpp"
+            name="Logitech Devices"
             ;;
         *)
             echo "Incorrect or no option chosen"
@@ -187,7 +185,7 @@ resetDevice() {
 
 # Media
 
-videoState() {
+video_state() {
     # $1 The file containing the list of videos
     cat $1 | while read video
     do
@@ -203,7 +201,7 @@ videoState() {
     done
 }
 
-rencode10() {
+rencode_10() {
     # if the input file is mkv output the file in a different directory
     if [[ $1 != "mkv" ]] then
         dest="."
@@ -211,28 +209,28 @@ rencode10() {
         dest="Re-Encoded"
         mkdir $dest
     fi
-    
+
     find -type f -name "*.$1" | while read video
-    do  
+    do
         ffmpeg -nostdin -vaapi_device /dev/dri/renderD128 -i "$video" -vf 'format=nv12,hwupload' -c:v av1_vaapi -b:v 10M -c:a copy "$dest/${video%.*}.mkv"
     done
 }
 
-toFlac() {
+to_flac() {
     find -type f -iname "*.$1" | parallel ffmpeg -i "{}" -c:a flac -sample_fmt s32 "{.}.flac"
 }
 
-flacToOpus() {
+flac_to_Opus() {
     find -type f -iname "*.flac" | parallel opusenc --bitrate $1 "{}" "{.}.opus"
 }
 
-tagMusic() {
+tag_music() {
     case $1 in
     "title")
-        kid3-cli -c "select *.opus" -c "totag '%{title}' 2" 
+        kid3-cli -c "select *.opus" -c "totag '%{title}' 2"
         ;;
     "album")
-        kid3-cli -c "select *.opus" -c "set Album '$2'" 
+        kid3-cli -c "select *.opus" -c "set Album '$2'"
         ;;
     *)
         echo "Argument must be title or album"
@@ -240,7 +238,7 @@ tagMusic() {
 }
 
 if [[ -f /usr/lib/jellyfin-ffmpeg/ffmpeg ]] then
-    removeDolbyVision() {
+    remove_dolby_vision() {
         mkvpropedit "$1" --delete-attachment mime-type:image/png
         mkvpropedit "$1" --delete-attachment mime-type:image/jpeg
         /usr/lib/jellyfin-ffmpeg/ffmpeg -y -hide_banner -stats -fflags +genpts+igndts -loglevel error -i "$1" -map 0 -bsf:v hevc_metadata=remove_dovi=1 -codec copy -max_muxing_queue_size 2048 -max_interleave_delta 0 -avoid_negative_ts disabled "${1%.*}-nodv.mkv"
@@ -260,90 +258,90 @@ extract_ps3_disc() {
 
 # Gaming-Wine
 
-wineKill() {
+wine_kill() {
     kill -9 $(ps -ef | grep -E -i "(wine|processid|\.exe)" | awk "{print $2}")
     killall -9 pressure-vessel-adverb
 }
 
-githubDownload() {
+github_download() {
     # $1 = file extension of the file to be downloaded
     wcurl $(curl -s $2 | jq -r .assets.[].browser_download_url | grep $1)
 }
 
-downloadProtonGE() {
+download_protonge() {
     local dest="$HOME/.local/share/Steam/compatibilitytools.d/GE-Proton-latest"
     sudo rm -r "$dest"
-    githubDownload .zst https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/latest
+    github_download .zst https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/latest
     mkdir "$dest"
     tar -xf GE-Proton*.tar.zst -C "$dest" --strip-components 1
     ln -s $HOME/Sync/Config/Gaming/Steam/user_settings.py "$dest"/user_settings.py
     rm GE-Proton*.tar.zst
 }
 
-downloadDXVK() {
-    githubDownload .gz "https://api.github.com/repos/doitsujin/dxvk/releases/latest"
+download_dxvk() {
+    github_download .gz "https://api.github.com/repos/doitsujin/dxvk/releases/latest"
     tar -xf dxvk*.tar.gz -C $HOME/Games/DirectX/DXVK --strip-components 1
     rm dxvk*.tar.gz
 }
 
-downloadVKD3D() {
-    githubDownload .zst "https://api.github.com/repos/HansKristian-Work/vkd3d-proton/releases/latest"
+download_vkd3d-proton() {
+    github_download .zst "https://api.github.com/repos/HansKristian-Work/vkd3d-proton/releases/latest"
     tar -xf vkd3d*.tar.zst -C $HOME/Games/DirectX/VKD3D-Proton --strip-components 1
     rm vkd3d*.tar.zst
 }
 
-downloadDirectX() {
-    downloadDXVK
-    downloadVKD3D
+download_directx() {
+    download_dxvk
+    download_vkd3d-proton
 }
 
 # Gaming-GPU
 
-changeGpuState() {
-    local gpuLevel="/sys/class/drm/card1/device/power_dpm_force_performance_level"
-    echo "Current GPU Level: $(cat $gpuLevel)"
+change_gpu_state() {
+    local gpu_level="/sys/class/drm/card1/device/power_dpm_force_performance_level"
+    echo "Current GPU Level: $(cat $gpu_level)"
     echo "Setting GPU Level to $1"
-    echo $1 | sudo tee "$gpuLevel" > /dev/null
-    echo "Current GPU Level: $(cat $gpuLevel)"
+    echo $1 | sudo tee "$gpu_level" > /dev/null
+    echo "Current GPU Level: $(cat $gpu_level)"
 }
 
-resetGpu() {
-    local gpuCfgFile="/sys/class/drm/card1/device/pp_od_clk_voltage"
-    echo "r" > sudo tee $gpuCfgFile > /dev/null
-    echo "c" > sudo tee $gpuCfgFile > /dev/null
+reset_gpu() {
+    local gpu_config_file="/sys/class/drm/card1/device/pp_od_clk_voltage"
+    echo "r" > sudo tee $gpu_config_file > /dev/null
+    echo "c" > sudo tee $gpu_config_file > /dev/null
 }
 
-gpuPowerCap() {
-    local powerCap="$(find /sys/class/drm/card1/device/hwmon -type f -name power1_cap)"
+gpu_power_cap() {
+    local cap="$(find /sys/class/drm/card1/device/hwmon -type f -name power1_cap)"
 
-    if [[ -f "$powerCap" ]] then
-        cat "$powerCap"
+    if [[ -f "$cap" ]] then
+        cat "$cap"
     fi
 }
 
 # Misc
 
-nasBackup() {
+nas_backup() {
     timestamp=$(date +"%Y-%m-%d")
-    backupDir="/mnt/NAS/Backup/Auto/$timestamp"
-    mkdir "$backupDir"
-    backupFile="$backupDir/$1 - Backup - $timestamp.tar.zst"
-    tar -I "zstd --ultra -22 -T$(nproc)" -cf "$backupFile" "$2"
+    backup_folder="/mnt/NAS/Backup/Auto/$timestamp"
+    mkdir "$backup_folder"
+    backup_file="$backup_folder/$1 - Backup - $timestamp.tar.zst"
+    tar -I "zstd --ultra -22 -T$(nproc)" -cf "$backup_file" "$2"
 }
 
 if [[ -f /usr/bin/pkgctl ]] then
-    downloadArchPackage() {
+    download_arch_package() {
         pkgctl repo clone --protocol=https $1
     }
-    
-    patchKernel() {
+
+    patch_kernel() {
         local patches="$SYNC_DIR/Config/Kernel/$1"
         cp $patches/tsc.patch tsc.patch
         patch -i $patches/PKGBUILD.patch PKGBUILD
     }
-    
-    buildKernel() {
-        local option="" 
+
+    build_kernel() {
+        local option=""
         local kernel=""
         echo "Kernel with TSC Patch builder"
         echo "1: linux"
@@ -355,9 +353,9 @@ if [[ -f /usr/bin/pkgctl ]] then
             kernel="linux-lts"
         fi
         sudo rm -r $kernel
-        downloadArchPackage $kernel
+        download_arch_package $kernel
         cd $kernel
-        patchKernel $kernel
+        patch_kernel $kernel
         makepkg -s --skipinteg --asdeps
         cd ../
         sudo rm -r $kernel
