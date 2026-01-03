@@ -105,16 +105,6 @@ toJxl() {
     find -type f -iname "*.$1" | parallel cjxl "{}" "{.}.jxl"
 }
 
-cacheClear() {
-    find "$XDG_CACHE_HOME" -iregex '.*\.\(jsc\|qmlc\)' -type f -mtime +1 -delete
-    find "$XDG_CACHE_HOME" -iname "ksycoca6*" -type f -mtime +1 -delete
-    find "$XDG_CACHE_HOME/qtshadercache-x86_64-little_endian-lp64/" -name "*" -type f -mtime +1 -delete
-    find "$XDG_CACHE_HOME" -name "*.qsb" -mtime +7 -delete
-    find "$XDG_CACHE_HOME" -name "_qt_QGfxShaderBuilder_*" -mtime +7 | xargs rm -r
-    find "$XDG_CACHE_HOME/fontconfig/" -name "*" -type f -mtime +7 -delete
-    echo "Cleared various cache files"
-}
-
 storageCleanup() {
     yay -Scc
     sudo rm -r /var/log/*
@@ -259,6 +249,15 @@ fi
 
 # Gaming
 
+# Gaming - Emulation
+
+# Extracts mounted PS3 disc to the RPCS3 disc folder
+# $1 Name of the game
+extract_ps3_disc() {
+    local dest=$ROMS_DIR/Sony/PS3/games/"$1"
+    rsync -ahW --info=progress2 --no-compress --mkpath --chmod=755 {PS3_GAME,PS3_DISC.SFB} "$dest"
+}
+
 # Gaming-Wine
 
 wineKill() {
@@ -267,6 +266,7 @@ wineKill() {
 }
 
 githubDownload() {
+    # $1 = file extension of the file to be downloaded
     wcurl $(curl -s $2 | jq -r .assets.[].browser_download_url | grep $1)
 }
 
