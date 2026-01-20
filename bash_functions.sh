@@ -43,9 +43,9 @@ docker_kill() {
 }
 
 docker_update() {
-    dockerFile="$SYNC_DIR/Scripts/Docker/docker-compose.yaml"
-    docker-compose -f $dockerFile pull
-    docker-compose -f $dockerFile up -d
+    docker_file="$SYNC_DIR/Scripts/Docker/docker-compose.yaml"
+    docker-compose -f $docker_file pull
+    docker-compose -f $docker_file up -d
     docker image prune -af
 }
 
@@ -118,70 +118,7 @@ if [[ -f /usr/bin/pacman ]] then
     pacin() {
         sudo pacman -U *.$1
     }
-
-    arch_backup() {
-        # Get a timestamp
-        local timestamp=$(date +"%Y-%m-%d")
-        # Define the backup folder
-        local backup_folder="Arch Backup - $HOSTNAME - $timestamp"
-        local backup_location="/mnt/NAS/Backup/Linux/Pacman"
-        # Create the backup folder
-        mkdir "$backup_folder"
-        # Create a text list of locally installed pacman packages
-        pacman -Qn | awk '{print $1}' > "$backup_folder"/pacman.txt
-        # Create a text list of locally installed aur packages
-        pacman -Qm | awk '{print $1}' > "$backup_folder"/aur.txt
-        # Compress the folder into a tar file
-        tar -I "zstd --ultra -22 -T$(nproc)" -cf "$backup_folder.tar.zst" "$backup_folder"
-        # Remove leftover folder and files
-        rm -r "$backup_folder"
-        if [[ -d $backup_location ]] then
-            cp "$backup_folder.tar.zst" $backup_location
-        else
-            scp "$backup_folder.tar.zst" $USER@nas:$backup_location
-        fi
-    }
 fi
-
-reset_device() {
-    local option=""
-    local module=""
-    local name=""
-    echo "Device Reset 1.0"
-    echo "1: Bluetooth               - btusb"
-    echo "2: Intel WiFi              - iwlmvm"
-    echo "3: Mediatek WiFi           - mt7921e"
-    echo "4: PlayStation Controllers - hid_playstation, hid_sony"
-    echo "5: Logitech Devices        - hid_logitech_dj, hid_logitech_hidp"
-    read -p "Option: " option
-    case $option in
-        1)
-            module="btusb"
-            name="Bluetooth"
-            ;;
-        2)
-            module="iwlmvm"
-            name="Intel WiFi"
-            ;;
-        3)
-            module="mt7921e"
-            name="Meditek WiFi"
-            ;;
-        4)
-            module="hid_playstation hid_sony"
-            name="Playstation Controllers"
-            ;;
-        5)
-            module="hid_logitech_dj hid_logitech_hidpp"
-            name="Logitech Devices"
-            ;;
-        *)
-            echo "Incorrect or no option chosen"
-            return
-    esac
-    echo "Resetting $name - module/s: $module"
-    sudo rmmod $module && sudo modprobe $module
-}
 
 # Media
 
@@ -220,8 +157,10 @@ to_flac() {
     find -type f -iname "*.$1" | parallel ffmpeg -i "{}" -c:a flac -sample_fmt s32 "{.}.flac"
 }
 
-flac_to_Opus() {
-    find -type f -iname "*.flac" | parallel opusenc --bitrate $1 "{}" "{.}.opus"
+# Bulk converts flac files to opus files
+# $1 bitrate of the opus file. For example 160000
+flac_to_opus() {
+    find -type f -iname "*.flac" | parallel ffmpeg -i "{}" -c:a libopus -b:a $1 "{.}.opus"
 }
 
 tag_music() {
@@ -237,6 +176,9 @@ tag_music() {
     esac
 }
 
+
+# Removes Dolby Vision from MKV HEVC HDR files
+# $1 file name of the video
 if [[ -f /usr/lib/jellyfin-ffmpeg/ffmpeg ]] then
     remove_dolby_vision() {
         mkvpropedit "$1" --delete-attachment mime-type:image/png
@@ -257,11 +199,6 @@ extract_ps3_disc() {
 }
 
 # Gaming-Wine
-
-wine_kill() {
-    kill -9 $(ps -ef | grep -E -i "(wine|processid|\.exe)" | awk "{print $2}")
-    killall -9 pressure-vessel-adverb
-}
 
 github_download() {
     # $1 = file extension of the file to be downloaded
@@ -288,11 +225,6 @@ download_vkd3d-proton() {
     github_download .zst "https://api.github.com/repos/HansKristian-Work/vkd3d-proton/releases/latest"
     tar -xf vkd3d*.tar.zst -C $HOME/Games/DirectX/VKD3D-Proton --strip-components 1
     rm vkd3d*.tar.zst
-}
-
-download_directx() {
-    download_dxvk
-    download_vkd3d-proton
 }
 
 # Gaming-GPU
