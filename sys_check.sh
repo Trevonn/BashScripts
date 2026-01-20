@@ -1,5 +1,5 @@
 #!/bin/bash
-# 
+#
 # System information functions
 
 # Gathers all the information about the current system
@@ -13,7 +13,7 @@ sys_info() {
             echo "Not installed"
         fi
     }
-    
+
     cpu_freq=/sys/devices/system/cpu/cpu0/cpufreq/
     kernel_version=$(uname -r)
     glibc_version=$(ldd --version | grep ldd | awk '{print $4}')
@@ -38,7 +38,6 @@ sys_info() {
     opengl_version=$(glxinfo | grep "OpenGL core profile version string" | awk '{ print $6 }')
     vulkan_version=$(vulkaninfo | grep apiVersion | awk 'NR==1 { print $3 }')
     mangohud_check=$(if [[ -f /usr/bin/mangohud ]]; then mangohud --version | grep -Po 'v\K.*'; else echo "Not installed"; fi)
-    gamemode_check=$(if [[ -f /usr/bin/gamemoded ]]; then gamemoded -v | awk '{ print $3 }' | cut -c 2-; else echo "Not installed"; fi )
     gamescope_check=$(is_installed /usr/bin/gamescope)
 }
 
@@ -79,7 +78,6 @@ sys_check() {
     echo "Misc"
     echo "......................"
     echo "MangoHud             : $mangohud_check"
-    echo "Feral GameMode       : $gamemode_check"
     echo "Gamescope            : $gamescope_check"
     echo "Steam udev rules     : $steam_udev_rules"
 
@@ -92,7 +90,7 @@ dxvk_template() {
     local proton_version="proton-$(cat "$proton_location/version" | awk '{print $2}')"
     local dxvk_version="Commit: $(cat "$proton_location/files/lib/wine/dxvk/version" | cut -b 2-8)"
     local vkd3d_proton_version="Commit: $(cat "$proton_location/files/lib/wine/vkd3d-proton/version" | cut -b 2-8)"
-    
+
     echo "### System Information"
     echo "- CPU            : $cpu_name"
     echo "- RAM            : $ram_qty"
