@@ -49,6 +49,17 @@ docker_update() {
     docker image prune -af
 }
 
+if [[ -f /usr/bin/flatpak ]] then
+    remove_flatpak() {
+        flatpak uninstall --all --delete-data
+        rm -r $HOME/.var
+        rm -r $XDG_CACHE_HOME/flatpak
+        rm -r $XDG_STATE_HOME/flatpak
+        sudo rm -r /var/lib/flatpak
+        sudo pacman -Rncs flatpak
+    }
+fi
+
 download_music() {
     yt-dlp --format 251 --extract-audio --audio-format "opus" $1 -o "%(title)s.%(ext)s"
 }
@@ -207,12 +218,12 @@ github_download() {
 
 download_protonge() {
     local dest="$HOME/.local/share/Steam/compatibilitytools.d/GE-Proton-latest"
-    sudo rm -r "$dest"
-    github_download .zst https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/latest
+    rm -r "$dest"
+    github_download .tar.gz "https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/latest"
     mkdir "$dest"
-    tar -xf GE-Proton*.tar.zst -C "$dest" --strip-components 1
+    tar -xf GE-Proton*.tar.gz -C "$dest" --strip-components 1
     ln -s $HOME/Sync/Config/Gaming/Steam/user_settings.py "$dest"/user_settings.py
-    rm GE-Proton*.tar.zst
+    rm GE-Proton*.tar.gz
 }
 
 download_dxvk() {
